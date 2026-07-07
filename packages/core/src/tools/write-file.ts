@@ -353,6 +353,13 @@ class WriteFileToolInvocation extends BaseToolInvocation<
         }
       },
       ideConfirmation,
+      cancelResult: {
+        fileDiff,
+        fileName,
+        filePath: this.resolvedPath,
+        originalContent,
+        newContent: correctedContent,
+      },
     };
     return confirmationDetails;
   }
