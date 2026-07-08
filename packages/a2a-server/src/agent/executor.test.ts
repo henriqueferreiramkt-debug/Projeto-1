@@ -300,4 +300,46 @@ describe('CoderAgentExecutor', () => {
       true,
     );
   });
+
+  it('cancelTask should abort the active execution loop', async () => {
+    const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
+    const taskId = 'test-task-to-cancel';
+    const contextId = 'test-context';
+
+    const mockSocket = new EventEmitter();
+    (requestStorage.getStore as Mock).mockReturnValue({
+      req: { socket: mockSocket },
+    });
+
+    const requestContext = {
+      userMessage: {
+        messageId: 'msg-1',
+        taskId,
+        contextId,
+        parts: [{ kind: 'text', text: 'a long running prompt' }],
+        metadata: {
+          coderAgent: { kind: 'agent-settings', workspacePath: '/tmp' },
+        },
+      },
+    } as unknown as RequestContext;
+
+    // Don't await this, let it run in the background.
+    // The mocked acceptUserMessage will hang until aborted.
+    const primaryPromise = executor.execute(requestContext, mockEventBus);
+
+    // Give it a moment to start and register the controller.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Now, cancel the task.
+    await executor.cancelTask(taskId, mockEventBus);
+
+    // Verify that the abort method on the controller was called.
+    expect(abortSpy).toHaveBeenCalledOnce();
+
+    // Clean up the test by allowing the promise to resolve.
+    // The abort call should have unblocked the acceptUserMessage generator.
+    await primaryPromise;
+
+    abortSpy.mockRestore();
+  });
 });

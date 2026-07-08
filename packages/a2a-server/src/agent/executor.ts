@@ -90,6 +90,7 @@ export class CoderAgentExecutor implements AgentExecutor {
   private tasks: Map<string, TaskWrapper> = new Map();
   // Track tasks with an active execution loop.
   private executingTasks = new Set<string>();
+  private activeAbortControllers = new Map<string, AbortController>();
 
   constructor(private taskStore?: TaskStore) {}
 
@@ -187,6 +188,16 @@ export class CoderAgentExecutor implements AgentExecutor {
     logger.info(
       `[CoderAgentExecutor] Received cancel request for task ${taskId}`,
     );
+
+    // 1. Abort the active execution loop immediately
+    const abortController = this.activeAbortControllers.get(taskId);
+    if (abortController) {
+      logger.info(
+        `[CoderAgentExecutor] Aborting active execution loop for task ${taskId}.`,
+      );
+      abortController.abort();
+    }
+
     const wrapper = this.tasks.get(taskId);
 
     if (!wrapper) {
@@ -331,6 +342,9 @@ export class CoderAgentExecutor implements AgentExecutor {
 
     const abortController = new AbortController();
     const abortSignal = abortController.signal;
+
+    // Register the abort controller for this task
+    this.activeAbortControllers.set(taskId, abortController);
 
     if (store) {
       // Grab the raw socket from the request object
@@ -644,6 +658,7 @@ export class CoderAgentExecutor implements AgentExecutor {
       }
     } finally {
       if (isPrimaryExecution) {
+        this.activeAbortControllers.delete(taskId); // Clean up the reference
         this.executingTasks.delete(taskId);
         logger.info(
           `[CoderAgentExecutor] Saving final state for task ${taskId}.`,
